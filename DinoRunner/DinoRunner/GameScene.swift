@@ -123,11 +123,20 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         for _ in touches {
             if let groundPosition = dinoYPosition {
                 if dinoSprite.position.y <= groundPosition && gameNode.speed > 0 {
+                    dinoPhysics(enable: true)
                     dinoSprite.physicsBody?.applyImpulse(CGVector(dx: 0, dy: dinoHopForce))
                     run(jumpSound)
                 }
             }
         }
+    }
+    
+    var previousDeltaY: CGFloat = 0
+    var currentDeltaY: CGFloat = 0
+    
+    func dinoPhysics(enable: Bool) {
+        dinoSprite.physicsBody?.affectedByGravity = enable
+        dinoSprite.physicsBody?.isDynamic = enable
     }
     
     override func update(_ currentTime: TimeInterval) {
@@ -148,6 +157,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                     spawnBird()
                 }
             }
+            
+            previousDeltaY = currentDeltaY
+            currentDeltaY = dinoSprite.physicsBody?.velocity.dy ?? 0
         }
     }
     
@@ -155,6 +167,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         if(hitCactus(contact) || hitBird(contact)){
             run(dieSound)
             gameOver()
+        }
+        
+        // when the dino hits the ground, make the bouncy movement stop
+        if hitGround(contact) && previousDeltaY < 0 {
+            dinoPhysics(enable: false)
         }
     }
     
@@ -166,6 +183,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     func hitBird(_ contact: SKPhysicsContact) -> Bool {
         return contact.bodyA.categoryBitMask & birdCategory == birdCategory ||
                 contact.bodyB.categoryBitMask & birdCategory == birdCategory
+    }
+    
+    func hitGround(_ contact: SKPhysicsContact) -> Bool {
+        return contact.bodyA.categoryBitMask & groundCategory == groundCategory ||
+                contact.bodyB.categoryBitMask & groundCategory == groundCategory
     }
     
     func resetGame() {
@@ -186,6 +208,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         
         let runningAnimation = SKAction.animate(with: [dinoTexture1, dinoTexture2], timePerFrame: 0.12)
         
+        dinoPhysics(enable: true)
         dinoSprite.position = CGPoint(x: self.frame.size.width * 0.15, y: dinoYPosition!)
         dinoSprite.run(SKAction.repeatForever(runningAnimation))
     }
@@ -198,6 +221,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let deadDinoTexture = SKTexture(imageNamed: "dino.assets/dinosaurs/dinoDead")
         deadDinoTexture.filteringMode = .nearest
         
+        dinoPhysics(enable: false)
         dinoSprite.removeAllActions()
         dinoSprite.texture = deadDinoTexture
     }
@@ -209,7 +233,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let groundTexture = SKTexture(imageNamed: "dino.assets/landscape/ground")
         groundTexture.filteringMode = .nearest
         
-        let homeButtonPadding = 50.0 as CGFloat
+        let homeButtonPadding: CGFloat
+        if #available(iOS 13.0, *) {
+            homeButtonPadding = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).flatMap({ $0.windows }).first!.safeAreaInsets.bottom
+        } else {
+            homeButtonPadding = 50
+        }
         groundHeight = groundTexture.size().height + homeButtonPadding
         
         //ground actions
@@ -338,8 +367,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         dinoSprite.physicsBody?.isDynamic = true
         dinoSprite.physicsBody?.mass = 1.0
         dinoSprite.physicsBody?.categoryBitMask = dinoCategory
-        dinoSprite.physicsBody?.contactTestBitMask = birdCategory | cactusCategory
+        dinoSprite.physicsBody?.contactTestBitMask = birdCategory | cactusCategory | groundCategory
         dinoSprite.physicsBody?.collisionBitMask = groundCategory
+        dinoSprite.physicsBody?.restitution = 0
         
         dinoYPosition = getGroundHeight() + dinoTexture1.size().height * dinoScale
         dinoSprite.position = CGPoint(x: screenWidth * 0.15, y: dinoYPosition!)
